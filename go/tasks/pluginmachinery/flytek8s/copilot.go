@@ -231,6 +231,7 @@ func AddCoPilotToPod(ctx context.Context, cfg config.FlyteCoPilotConfig, coPilot
 			if err != nil {
 				return err
 			}
+			downloader.Env = decorateDefaultEnvVars(downloader.Env)
 			coPilotPod.InitContainers = append(coPilotPod.InitContainers, downloader)
 		}
 
@@ -260,6 +261,7 @@ func AddCoPilotToPod(ctx context.Context, cfg config.FlyteCoPilotConfig, coPilot
 			if err != nil {
 				return err
 			}
+			sidecar.Env = decorateDefaultEnvVars(sidecar.Env)
 			coPilotPod.Containers = append(coPilotPod.Containers, sidecar)
 		}
 

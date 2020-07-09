@@ -9,9 +9,8 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials/ec2rolecreds"
-	"github.com/aws/aws-sdk-go/aws/ec2metadata"
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/lyft/flyteidl/gen/pb-go/flyteidl/core"
 	"github.com/lyft/flytestdlib/config"
 	"github.com/lyft/flytestdlib/config/viper"
@@ -78,29 +77,28 @@ func PollUntilTimeout(ctx context.Context, pollInterval, timeout time.Duration, 
 	return wait.PollUntil(pollInterval, condition, childCtx.Done())
 }
 
-func checkAWSCreds() error {
-	cfg, err := session.NewSession(&aws.Config{})
+func checkAWSCreds(ctx context.Context, bucket string) error {
+	cfg := aws.NewConfig().WithCredentialsChainVerboseErrors(true).WithRegion("us-east-1")
+	sess, err := session.NewSession(cfg)
+	if err != nil {
+		logger.Errorf(ctx, "Failed to create session")
+		return err
+	}
+	s3Client := s3.New(sess)
+	o, err := s3Client.GetBucketLocation(&s3.GetBucketLocationInput{
+		 Bucket: &bucket,
+	})
 	if err != nil {
 		return err
 	}
-
-	role := &ec2rolecreds.EC2RoleProvider{
-		Client: ec2metadata.New(cfg),
-	}
-	creds, err := role.Retrieve()
-	if err != nil {
-		return err
-	}
-	if creds.AccessKeyID == "" || creds.SecretAccessKey == "" || creds.SessionToken == "" {
-		return fmt.Errorf("invalid data in credential fetch")
-	}
+	logger.Infof(ctx, "Successfully loaded bucket: %s", o.GoString())
 	return nil
 }
 
-func waitForAWSCreds(ctx context.Context, timeout time.Duration) error {
+func waitForAWSCreds(ctx context.Context, timeout time.Duration, bucket string) error {
 	return PollUntilTimeout(ctx, time.Second*5, timeout, func() (bool, error) {
-		if err := checkAWSCreds(); err != nil {
-			logger.Errorf(ctx, "Failed to Get credentials.")
+		if err := checkAWSCreds(ctx, bucket); err != nil {
+			logger.Errorf(ctx, "Failed to Get credentials. Error: %s", err)
 			return false, nil
 		}
 		return true, nil
@@ -121,7 +119,7 @@ func NewDataCommand() *cobra.Command {
 			rootOpts.Scope = promutils.NewScope("flyte:data")
 			cfg := storage.GetConfig()
 			if cfg.Type == storage.TypeS3 {
-				if err := waitForAWSCreds(context.Background(), time.Minute*10); err != nil {
+				if err := waitForAWSCreds(context.Background(), time.Minute*10, cfg.InitContainer); err != nil {
 					return err
 				}
 			}

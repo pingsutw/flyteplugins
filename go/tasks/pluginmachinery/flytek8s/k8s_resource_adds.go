@@ -109,10 +109,7 @@ func GetExecutionEnvVars(id pluginsCore.TaskExecutionID) []v1.EnvVar {
 	return envVars
 }
 
-func DecorateEnvVars(ctx context.Context, envVars []v1.EnvVar, id pluginsCore.TaskExecutionID) []v1.EnvVar {
-	envVars = append(envVars, GetContextEnvVars(ctx)...)
-	envVars = append(envVars, GetExecutionEnvVars(id)...)
-
+func decorateDefaultEnvVars(envVars []v1.EnvVar) []v1.EnvVar {
 	for k, v := range config.GetK8sPluginConfig().DefaultEnvVars {
 		envVars = append(envVars, v1.EnvVar{Name: k, Value: v})
 	}
@@ -120,8 +117,14 @@ func DecorateEnvVars(ctx context.Context, envVars []v1.EnvVar, id pluginsCore.Ta
 		value := os.Getenv(envVarName)
 		envVars = append(envVars, v1.EnvVar{Name: k, Value: value})
 	}
-
 	return envVars
+}
+
+func DecorateEnvVars(ctx context.Context, envVars []v1.EnvVar, id pluginsCore.TaskExecutionID) []v1.EnvVar {
+	envVars = append(envVars, GetContextEnvVars(ctx)...)
+	envVars = append(envVars, GetExecutionEnvVars(id)...)
+
+	return decorateDefaultEnvVars(envVars)
 }
 
 func GetPodTolerations(interruptible bool, resourceRequirements ...v1.ResourceRequirements) []v1.Toleration {
